@@ -1,0 +1,12 @@
+version: 2
+
+models:
+  - name: fct_po_spend
+    description: "Fact table for purchase order spend, aggregated monthly by vendor and line of business."
+    columns:
+      - name: po_number
+        description: "Purchase order number"
+      - name: month
+        description: "Month of the PO creation date"
+      - name: value_in_gbp
+        description: "Spend value in GBP"
