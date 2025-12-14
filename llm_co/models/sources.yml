@@ -6,4 +6,4 @@ sources:
     schema: raw
     tables:
       - name: purchase_orders
-        description: "Raw purchase order data uploaded by UI to Databricks"
+        description: "Raw purchase order data"

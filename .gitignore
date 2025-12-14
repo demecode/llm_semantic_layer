@@ -1,0 +1,63 @@
+### OS / editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+### Python cache and build artifacts
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+.eggs/
+*.egg-info/
+*.dist-info/
+build/
+dist/
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.ipynb_checkpoints/
+
+### Virtual environments
+.venv/
+venv/
+ENV/
+env/
+.python-version
+
+### Environment variables and credentials
+.env
+.env.local
+.env.*.local
+.envrc
+*.pem
+*.key
+*.crt
+*.p12
+
+### Logs and local data
+logs/
+*.log
+tmp/
+temp/
+cache/
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+### dbt artifacts and profiles
+dbt_packages/
+dbt_modules/
+target/
+.dbt/
+profiles.yml
+profiles.yaml
+.user.yml
