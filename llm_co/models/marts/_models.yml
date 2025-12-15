@@ -1,0 +1,9 @@
+models: 
+# Hourly time spine
+  - name: time_spine
+    description: my favorite time spine
+    time_spine:
+      standard_granularity_column: date_day # column for the standard grain of your table, must be date time type.
+    columns:
+        - name: date_day
+          granularity: day  # Set the granularity of the column

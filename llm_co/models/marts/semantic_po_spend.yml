@@ -1,0 +1,58 @@
+version: 2
+
+semantic_models:
+  - name: po_spend
+    model: ref('fct_po_spend')
+    description: "Semantic model for purchase order spend facts."
+
+    defaults:
+      agg_time_dimension: po_creation_date
+
+    entities:
+      - name: purchase_order
+        type: primary
+        expr: po_number
+
+    dimensions:
+      - name: po_creation_date
+        type: time
+        type_params:
+          time_granularity: day
+
+      - name: po_month
+        type: time
+        type_params:
+          time_granularity: month
+
+      - name: vendor_name
+        type: categorical
+        expr: vendor_name
+
+      - name: line_of_business
+        type: categorical
+        expr: line_of_business
+
+    measures:
+      - name: spend_gbp
+        label: "Spend in GBP"
+        description: "Total spend in GBP"
+        agg: sum
+        expr: value_in_gbp
+
+
+metrics:
+  - name: total_spend
+    label: "Total Spend (GBP)"
+    description: "Total purchase order spend in GBP"
+    type: simple
+    type_params:
+      measure: spend_gbp
+
+  - name: digital_solutions_spend
+    label: "Digital Solutions Spend (GBP)"
+    description: "Spend in GBP for Digital Solutions only"
+    type: simple
+    type_params:
+      measure: spend_gbp
+    filter: |
+      line_of_business = 'Digital Solutions'
