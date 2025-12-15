@@ -20,7 +20,7 @@ from eng.llm_ollama import route_with_ollama
 class TestCase:
     id: str
     question: str
-    expected_tool: str
+    expected_metric: str
     expected_params: Dict[str, Any]
 
 
@@ -36,7 +36,7 @@ def load_cases(path: str) -> List[TestCase]:
                 TestCase(
                     id=obj["id"],
                     question=obj["question"],
-                    expected_tool=obj["expected_tool"],
+                    expected_metric=obj["expected_metric"],
                     expected_params=obj.get("expected_params", {}) or {},
                 )
             )
@@ -107,7 +107,7 @@ def run_eval(
     tool_correct = 0
     params_correct = 0
 
-    by_tool = {}  # expected_tool -> stats
+    by_tool = {}  # expected_metric -> stats
 
     for case in cases:
         for r in range(repeats):
@@ -118,7 +118,7 @@ def run_eval(
             actual_tool = normalize_tool(result.get("tool"))
             actual_params = result.get("params", {}) or {}
 
-            tool_ok = actual_tool == case.expected_tool
+            tool_ok = actual_tool == case.expected_metric
             params_ok = False
             params_reason = "skipped"
 
@@ -129,17 +129,17 @@ def run_eval(
             tool_correct += int(tool_ok)
             params_correct += int(params_ok)
 
-            by_tool.setdefault(case.expected_tool, {"n": 0, "tool_ok": 0, "params_ok": 0})
-            by_tool[case.expected_tool]["n"] += 1
-            by_tool[case.expected_tool]["tool_ok"] += int(tool_ok)
-            by_tool[case.expected_tool]["params_ok"] += int(params_ok)
+            by_tool.setdefault(case.expected_metric, {"n": 0, "tool_ok": 0, "params_ok": 0})
+            by_tool[case.expected_metric]["n"] += 1
+            by_tool[case.expected_metric]["tool_ok"] += int(tool_ok)
+            by_tool[case.expected_metric]["params_ok"] += int(params_ok)
 
             rows_out.append(
                 {
                     "id": case.id,
                     "repeat": r + 1,
                     "question": case.question,
-                    "expected_tool": case.expected_tool,
+                    "expected_metric": case.expected_metric,
                     "expected_params": json.dumps(case.expected_params, ensure_ascii=False),
                     "actual_tool": actual_tool,
                     "actual_params": json.dumps(actual_params, ensure_ascii=False),
@@ -158,21 +158,21 @@ def run_eval(
         writer.writerows(rows_out)
 
     total = len(cases) * repeats
-    tool_acc = (tool_correct / total) * 100 if total else 0.0
+    metric_acc = (tool_correct / total) * 100 if total else 0.0
     params_acc = (params_correct / total) * 100 if total else 0.0
 
     print("\n=== Eval Summary ===")
     print(f"Cases: {len(cases)} | Repeats: {repeats} | Total runs: {total}")
-    print(f"Tool accuracy:   {tool_acc:.1f}%")
+    print(f"Metric accuracy: {metric_acc:.1f}%")
     print(f"Param accuracy:  {params_acc:.1f}% (only scored when tool matched)")
     print(f"Results CSV: {output_csv}\n")
 
-    print("By expected tool:")
+    print("By expected metric:")
     for tool, s in by_tool.items():
         n = s["n"]
         ta = (s["tool_ok"] / n) * 100 if n else 0
         pa = (s["params_ok"] / n) * 100 if n else 0
-        print(f"  - {tool:30s}  n={n:3d}  tool_acc={ta:5.1f}%  params_acc={pa:5.1f}%")
+        print(f"  - {tool:30s}  n={n:3d}  metric_acc={ta:5.1f}%  params_acc={pa:5.1f}%")
 
 
 def main():

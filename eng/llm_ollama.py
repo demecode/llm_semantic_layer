@@ -117,4 +117,4 @@ Response JSON format (no markdown, no explanation):
     tool = obj.get("tool", "unknown")
     params = obj.get("params", {}) or {}
 
-    return {"tool": tool, "params": params}
+    return { "metric": "digital_solutions_spend", "params": { "grain": "month", "start_date": "...", "end_date": "..." } }

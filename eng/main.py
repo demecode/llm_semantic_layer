@@ -9,6 +9,8 @@ from typing import Optional
 from pydantic import BaseModel
 from datetime import date, time
 from eng.logger import logger
+from eng.semantics.dbt_metric_ldr import load_dbt_metrics
+from eng.semantics.inspect_manifest import inspect_manifest
 
 app = FastAPI(title="LLM x1")
 
@@ -186,3 +188,61 @@ def top_vendors(limit: int = 10):
     ]
 
     return VendorKpiResponse(sql=sql, vendors=vendors)
+
+
+@app.get("/metrics")
+def list_metrics():
+    metrics, _ = load_dbt_metrics()
+    return {
+        "metrics": [
+            {"name": m["name"], "label": m["label"], "description": m["description"]}
+            for m in metrics.values()
+        ]
+    }
+
+
+@app.get("/debug/manifest")
+def debug_manifest():
+    return inspect_manifest()
+
+from eng.semantics.dbt_semantics import list_metrics as dbt_list_metrics
+
+@app.get("/metrics")
+def metrics():
+    return {"metrics": dbt_list_metrics()}
+
+from eng.semantics.dbt_semantics import load_metrics_and_semantic_models
+from eng.semantics.metric_sql import build_metric_timeseries_sql
+from eng.databricks_client import run_query
+
+@app.get("/metric/{metric_name}")
+def run_metric(metric_name: str, grain: str = "month", start_date: str | None = None, end_date: str | None = None):
+    metrics, semantic_models = load_metrics_and_semantic_models()
+
+    # find metric by name
+    metric = None
+    for _id, m in metrics.items():
+        if m.get("name") == metric_name:
+            metric = m
+            break
+    if not metric:
+        return {"error": f"Metric not found: {metric_name}"}
+
+    # choose the semantic model (for now: first one that contains the referenced measure)
+    measure_name = (metric.get("type_params") or {}).get("measure")
+    chosen_sm = None
+    for sm in semantic_models.values():
+        for meas in (sm.get("measures") or []):
+            if meas.get("name") == measure_name:
+                chosen_sm = sm
+                break
+        if chosen_sm:
+            break
+    if not chosen_sm:
+        return {"error": f"Could not resolve semantic model for metric '{metric_name}' (measure '{measure_name}')"}
+
+    params = {"grain": grain, "start_date": start_date, "end_date": end_date}
+    sql, meta = build_metric_timeseries_sql(metric, chosen_sm, params)
+    rows = run_query(sql)
+
+    return {"meta": meta, "sql": sql, "rows": rows}

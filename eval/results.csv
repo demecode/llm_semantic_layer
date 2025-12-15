@@ -1,4 +1,4 @@
-id,repeat,question,expected_tool,expected_params,actual_tool,actual_params,tool_pass,params_pass,params_reason,elapsed_ms
+id,repeat,question,expected_metric,expected_params,actual_tool,actual_params,tool_pass,params_pass,params_reason,elapsed_ms
 ds_01,1,Show me Digital Solutions spend vs total spend by month,digital_solutions_spend_vs_total,{},digital_solutions_spend_vs_total,"{""type"": ""monthly""}",True,True,ok,7994
 ds_01,2,Show me Digital Solutions spend vs total spend by month,digital_solutions_spend_vs_total,{},digital_solutions_spend_vs_total,"{""period"": ""monthly""}",True,True,ok,1004
 ds_01,3,Show me Digital Solutions spend vs total spend by month,digital_solutions_spend_vs_total,{},digital_solutions_spend_vs_total,"{""period"": ""month""}",True,True,ok,1001
