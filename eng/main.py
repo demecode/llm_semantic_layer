@@ -7,7 +7,8 @@ from eng.llm_ollama import route_with_ollama
 
 from typing import Optional
 from pydantic import BaseModel
-
+from datetime import date, time
+from eng.logger import logger
 
 app = FastAPI(title="LLM x1")
 
@@ -24,8 +25,7 @@ class KpiResponse(BaseModel):
     total_digital_solutions_spend_gbp: float
     total_spend_gbp: float
 
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel
+
 
 # ... you already have TimeSeriesPoint and KpiResponse
 
@@ -45,15 +45,24 @@ def health():
 
 
 @app.get("/kpi/digital-solutions-spend-vs-total", response_model=KpiResponse)
-def digital_solutions_spend_vs_total():
-    # You can tune this SQL later; for now it's simple + explicit.
-    sql = """
+def digital_solutions_spend_vs_total(
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+):
+    date_filter = ""
+    if start_date:
+        date_filter += f" AND po_creation_date >= DATE('{start_date}')"
+    if end_date:
+        date_filter += f" AND po_creation_date < DATE('{end_date}')"
+    # Build final SQL with optional date filters
+    sql = f"""
     SELECT
         date_trunc('month', po_creation_date) AS month,
         SUM(CASE WHEN line_of_business = 'Digital Solutions'
                  THEN value_in_gbp ELSE 0 END) AS digital_solutions_spend_gbp,
         SUM(value_in_gbp) AS total_spend_gbp
     FROM `llm-v1`.analytics.fct_po_spend
+    WHERE 1=1{date_filter}
     GROUP BY date_trunc('month', po_creation_date)
     ORDER BY month;
     """
@@ -91,6 +100,8 @@ class ChatResponse(BaseModel):
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
+    import time
+    start_time = time.time()
     q = req.question
 
     routing = route_with_ollama(q)
@@ -130,6 +141,15 @@ def chat(req: ChatRequest):
         return ChatResponse(answer=answer, vendor_kpi=vendor_kpi)
 
     # 3) Fallback when Ollama returns 'unknown'
+    elapsed_ms = int((time.time() - start_time) * 1000)
+
+    logger.info(
+        "question=%s tool=%s params=%s elapsed_ms=%d",
+        q,
+        tool,
+        params,
+        elapsed_ms,
+    )
     return ChatResponse(
         answer=(
             "I couldn't map your question to a known governed metric yet.\n\n"
