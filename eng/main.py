@@ -10,7 +10,9 @@ from pydantic import BaseModel
 from datetime import date, time
 from eng.logger import logger
 from eng.semantics.dbt_metric_ldr import load_dbt_metrics
-from eng.semantics.inspect_manifest import inspect_manifest
+from eng.semantics.dbt_semantics import load_metrics_semantic_models_and_nodes
+
+
 
 app = FastAPI(title="LLM x1")
 
@@ -97,72 +99,52 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     answer: str
-    kpi: Optional[KpiResponse] = None
-    vendor_kpi: Optional[VendorKpiResponse] = None
+    meta: Optional[Dict[str, Any]] = None
+    data: Optional[List[Dict[str, Any]]] = None
+    # kpi: Optional[KpiResponse] = None
+    # vendor_kpi: Optional[VendorKpiResponse] = None
+
+
+
+from eng.llm_ollama import route_with_ollama 
+from eng.semantics.execute_metric import execute_metric
+from eng.semantics.dbt_semantics import list_metrics
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
-    import time
-    start_time = time.time()
     q = req.question
 
     routing = route_with_ollama(q)
-    tool = routing.get("tool", "unknown")
-    params = routing.get("params", {})
+    metric = routing.get("metric", "unknown")
+    params = routing.get("params", {}) or {}
 
-    # 1) Digital Solutions spend vs total
-    if tool == "digital_solutions_spend_vs_total":
-        kpi = digital_solutions_spend_vs_total()
+    logger.info(f"/chat q={q!r} metric={metric} params={params}")
 
-        answer = (
-            "I routed your question to the 'Digital Solutions spend vs total' metric. "
-            "Here’s Digital Solutions spend vs total spend by month, "
-            "based on the governed fct_po_spend model in Databricks. "
-            f"Total Digital Solutions spend: £{kpi.total_digital_solutions_spend_gbp:,.2f}. "
-            f"Total overall spend: £{kpi.total_spend_gbp:,.2f}."
+    # Unknown → show governed options
+    if metric == "unknown":
+        available = ", ".join(m["name"] for m in list_metrics())
+        return ChatResponse(
+            answer=(
+                "I couldn't map your question to a known governed metric yet.\n\n"
+                f"Available governed metrics: {available}\n\n"
+                "Try:\n"
+                "• 'Show me total spend by month'\n"
+                "• 'Show me Digital Solutions spend by month'\n"
+            )
         )
 
-        return ChatResponse(answer=answer, kpi=kpi)
+    result = execute_metric(metric, params)
 
-    # 2) Top vendors by spend
-    if tool == "top_vendors":
-        limit = int(params.get("limit", 10) or 10)
-        vendor_kpi = top_vendors(limit=limit)
+    if "error" in result:
+        return ChatResponse(answer=result["error"])
 
-        top_list = ", ".join(
-            f"{v.vendor_name} (£{v.total_spend_gbp:,.0f})"
-            for v in vendor_kpi.vendors[: min(limit, 5)]
-        )
-
-        answer = (
-            f"I routed your question to the 'top vendors by spend' metric "
-            f"(limit={limit}). "
-            f"Here are some of the top vendors by total spend in GBP: {top_list}."
-        )
-
-        return ChatResponse(answer=answer, vendor_kpi=vendor_kpi)
-
-    # 3) Fallback when Ollama returns 'unknown'
-    elapsed_ms = int((time.time() - start_time) * 1000)
-
-    logger.info(
-        "question=%s tool=%s params=%s elapsed_ms=%d",
-        q,
-        tool,
-        params,
-        elapsed_ms,
-    )
+    # Simple response for now (we’ll improve narrative + chart formatting next)
     return ChatResponse(
-        answer=(
-            "I couldn't map your question to a known governed metric yet.\n\n"
-            "Right now I know how to answer:\n"
-            "- Digital Solutions spend vs total spend over time\n"
-            "- Top vendors by total spend\n\n"
-            "Try asking one of those, e.g.:\n"
-            "• 'Show me Digital Solutions spend vs total spend by month'\n"
-            "• 'Who are the top vendors by spend?'"
-        )
+        answer=f"I ran metric '{metric}' with params {params}.",
+        meta=result["meta"],
+        data=result["rows"],
     )
+
 from .databricks_client import run_query
 
 @app.get("/kpi/top-vendors", response_model=VendorKpiResponse)
@@ -190,59 +172,86 @@ def top_vendors(limit: int = 10):
     return VendorKpiResponse(sql=sql, vendors=vendors)
 
 
-@app.get("/metrics")
-def list_metrics():
-    metrics, _ = load_dbt_metrics()
-    return {
-        "metrics": [
-            {"name": m["name"], "label": m["label"], "description": m["description"]}
-            for m in metrics.values()
-        ]
-    }
-
-
-@app.get("/debug/manifest")
-def debug_manifest():
-    return inspect_manifest()
-
-from eng.semantics.dbt_semantics import list_metrics as dbt_list_metrics
+from eng.semantics.dbt_semantics import list_metrics
 
 @app.get("/metrics")
 def metrics():
-    return {"metrics": dbt_list_metrics()}
+    return {"metrics": list_metrics()}
 
-from eng.semantics.dbt_semantics import load_metrics_and_semantic_models
+from eng.semantics.dbt_semantics import load_manifest
+@app.get("/debug/manifest")
+def debug_manifest():
+    m = load_manifest()
+    return {
+        "manifest_path": load_manifest.__globals__["DBT_MANIFEST_PATH"],
+        "top_level_keys": sorted(list(m.keys())),
+        "metrics_count": len(m.get("metrics") or {}),
+        "semantic_models_count": len(m.get("semantic_models") or {}),
+        "nodes_count": len(m.get("nodes") or {}),
+    }
+
+
 from eng.semantics.metric_sql import build_metric_timeseries_sql
 from eng.databricks_client import run_query
 
-@app.get("/metric/{metric_name}")
-def run_metric(metric_name: str, grain: str = "month", start_date: str | None = None, end_date: str | None = None):
-    metrics, semantic_models = load_metrics_and_semantic_models()
 
-    # find metric by name
-    metric = None
-    for _id, m in metrics.items():
-        if m.get("name") == metric_name:
-            metric = m
-            break
+@app.get("/metric/{metric_name}")
+def run_metric(
+    metric_name: str,
+    grain: str = "month",
+    start_date: str | None = None,
+    end_date: str | None = None,
+):
+    # 1) Load dbt artifacts
+    metrics, semantic_models, nodes = load_metrics_semantic_models_and_nodes()
+
+    # 2) Find the metric by name
+    metric = next(
+        (m for m in metrics.values() if m.get("name") == metric_name),
+        None,
+    )
     if not metric:
         return {"error": f"Metric not found: {metric_name}"}
 
-    # choose the semantic model (for now: first one that contains the referenced measure)
-    measure_name = (metric.get("type_params") or {}).get("measure")
+    # 3) Resolve semantic model (by measure)
+    from eng.semantics.metric_sql import normalize_measure_name
+
+    measure_obj = (metric.get("type_params") or {}).get("measure")
+    measure_name = normalize_measure_name(measure_obj)
+
     chosen_sm = None
     for sm in semantic_models.values():
-        for meas in (sm.get("measures") or []):
+        for meas in sm.get("measures", []):
             if meas.get("name") == measure_name:
                 chosen_sm = sm
                 break
         if chosen_sm:
             break
-    if not chosen_sm:
-        return {"error": f"Could not resolve semantic model for metric '{metric_name}' (measure '{measure_name}')"}
 
-    params = {"grain": grain, "start_date": start_date, "end_date": end_date}
-    sql, meta = build_metric_timeseries_sql(metric, chosen_sm, params)
+    if not chosen_sm:
+        return {
+            "error": f"Could not resolve semantic model for metric '{metric_name}'"
+        }
+
+    # 4) Build SQL using dbt semantics
+    params = {
+        "grain": grain,
+        "start_date": start_date,
+        "end_date": end_date,
+    }
+
+    sql, meta = build_metric_timeseries_sql(
+        metric=metric,
+        semantic_model=chosen_sm,
+        nodes=nodes,
+        params=params,
+    )
+
+    # 5) Execute SQL
     rows = run_query(sql)
 
-    return {"meta": meta, "sql": sql, "rows": rows}
+    return {
+        "meta": meta,
+        "sql": sql,
+        "rows": rows,
+    }

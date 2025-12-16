@@ -1,48 +1,39 @@
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, Tuple
+
+DBT_MANIFEST_PATH = os.getenv("DBT_MANIFEST_PATH", "../llm_co/target/manifest.json")
 
 
 def load_manifest() -> Dict[str, Any]:
     return json.loads(Path(DBT_MANIFEST_PATH).read_text(encoding="utf-8"))
 
 
-def load_metrics_and_semantic_models() -> Tuple[Dict[str, Any], Dict[str, Any]]:
+def load_metrics_semantic_models_and_nodes() -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
     m = load_manifest()
     metrics = m.get("metrics") or {}
     semantic_models = m.get("semantic_models") or {}
-    return metrics, semantic_models
+    nodes = m.get("nodes") or {}
+    return metrics, semantic_models, nodes
 
 
-def list_metrics(manifest_path: str = "target/manifest.json"):
-    metrics, _ = load_metrics_and_semantic_models(manifest_path)
+from typing import Any, Dict, List
+
+def list_metrics() -> List[Dict[str, Any]]:
+    metrics, _, _ = load_metrics_semantic_models_and_nodes()
+
     out = []
-    for _id, metric in metrics.items():
+    for m in metrics.values():
         out.append({
-            "name": metric.get("name"),
-            "label": metric.get("label"),
-            "description": metric.get("description", ""),
-            "type": metric.get("type"),
-            "type_params": metric.get("type_params", {}),
-            "filter": metric.get("filter"),
-            "time_grains": metric.get("time_grains", []),
+            "name": m.get("name"),
+            "label": m.get("label"),
+            "description": m.get("description", ""),
+            "type": m.get("type"),
+            "time_grains": m.get("time_grains", []),
+            "filter": m.get("filter"),
         })
-    out = [m for m in out if m["name"]]
+
+    out = [x for x in out if x["name"]]
     out.sort(key=lambda x: x["name"])
-    return 
-
-
-
-import os
-import json
-from pathlib import Path
-
-DBT_MANIFEST_PATH = os.getenv(
-    "DBT_MANIFEST_PATH",
-    "../llm_co/target/manifest.json",  # safe default
-)
-
-def load_manifest():
-    return json.loads(
-        Path(DBT_MANIFEST_PATH).read_text(encoding="utf-8")
-    )
+    return out

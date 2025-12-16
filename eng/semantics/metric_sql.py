@@ -1,61 +1,77 @@
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
+from eng.semantics.relation_resolver import resolve_semantic_model_relation
 
 
-def _find_measure(semantic_model: Dict[str, Any], measure_name: str) -> Dict[str, Any]:
-    for m in (semantic_model.get("measures") or []):
-        if m.get("name") == measure_name:
-            return m
-    raise KeyError(f"Measure '{measure_name}' not found in semantic model '{semantic_model.get('name')}'")
+def normalize_measure_name(measure: Any) -> Optional[str]:
+    if measure is None:
+        return None
+    if isinstance(measure, str):
+        return measure
+    if isinstance(measure, dict):
+        return measure.get("name")
+    return None
 
 
-def _resolve_relation(semantic_model: Dict[str, Any]) -> str:
-    # Different dbt versions store this differently; try the common fields.
-    return (
-        semantic_model.get("relation_name")
-        or semantic_model.get("model")          # sometimes a string-like ref
-        or semantic_model.get("name")           # last resort
-    )
+def normalize_metric_filter_to_where_clauses(metric_filter: Any) -> List[str]:
+    """
+    dbt metric 'filter' can be None, a string, or a dict with where_filters.
+    Return a list of SQL WHERE clauses (strings).
+    """
+    if not metric_filter:
+        return []
 
+    if isinstance(metric_filter, str):
+        return [metric_filter]
 
-def _resolve_timestamp_column(semantic_model: Dict[str, Any]) -> str:
-    defaults = semantic_model.get("defaults") or {}
-    # In your YAML you used agg_time_dimension: po_creation_date
-    return defaults.get("agg_time_dimension") or "po_creation_date"
+    if isinstance(metric_filter, dict):
+        where_filters = metric_filter.get("where_filters") or []
+        clauses = []
+        for wf in where_filters:
+            tmpl = (wf or {}).get("where_sql_template")
+            if tmpl:
+                clauses.append(tmpl)
+        return clauses
+
+    return []
 
 
 def build_metric_timeseries_sql(
     metric: Dict[str, Any],
     semantic_model: Dict[str, Any],
+    nodes: Dict[str, Any],
     params: Dict[str, Any],
 ) -> Tuple[str, Dict[str, Any]]:
-    """
-    Build a time-series query for a SIMPLE metric.
-    Params:
-      - grain: day|month|quarter|year (default month)
-      - start_date: YYYY-MM-DD (optional)
-      - end_date: YYYY-MM-DD (optional)
-    """
-    metric_name = metric["name"]
+
     grain = (params.get("grain") or "month").lower()
     start_date = params.get("start_date")
     end_date = params.get("end_date")
 
-    type_params = metric.get("type_params") or {}
-    measure_name = type_params.get("measure")
+    # --- resolve measure ---
+    measure_obj = (metric.get("type_params") or {}).get("measure")
+    measure_name = normalize_measure_name(measure_obj)
     if not measure_name:
-        raise ValueError(f"Metric '{metric_name}' missing type_params.measure")
+        raise ValueError(f"Metric '{metric['name']}' missing measure")
 
-    measure = _find_measure(semantic_model, measure_name)
+    # --- resolve semantic model → physical relation ---
+    relation = resolve_semantic_model_relation(semantic_model, nodes)
 
-    agg = (measure.get("agg") or "sum").lower()
-    expr = measure.get("expr") or "value_in_gbp"
+    # --- resolve timestamp ---
+    ts_col = (
+        (semantic_model.get("defaults") or {}).get("agg_time_dimension")
+        or "po_creation_date"
+    )
 
-    relation = _resolve_relation(semantic_model)
-    ts_col = _resolve_timestamp_column(semantic_model)
+    # --- resolve measure expression ---
+    measure = next(
+        m for m in semantic_model["measures"] if m["name"] == measure_name
+    )
+    agg = measure["agg"]
+    expr = measure["expr"]
 
     where = []
-    if metric.get("filter"):
-        where.append(f"({metric['filter']})")
+    for clause in normalize_metric_filter_to_where_clauses(metric.get("filter")):
+        where.append(f"({clause})")
     if start_date:
         where.append(f"{ts_col} >= DATE('{start_date}')")
     if end_date:
@@ -74,10 +90,11 @@ def build_metric_timeseries_sql(
     """.strip()
 
     meta = {
-        "metric": metric_name,
-        "grain": grain,
+        "metric": metric["name"],
         "relation": relation,
+        "grain": grain,
         "timestamp_column": ts_col,
         "measure": measure_name,
     }
+
     return sql, meta
