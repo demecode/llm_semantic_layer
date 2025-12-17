@@ -56,3 +56,23 @@ metrics:
       measure: spend_gbp
     filter: |
       line_of_business = 'Digital Solutions'
+
+  - name: rest_of_company_spend
+    label: "Rest of Company Spend (GBP)"
+    description: "Total spend excluding Digital Solutions"
+    type: derived
+    type_params:
+      expr: total - ds
+      metrics:
+        - name: total_spend
+          alias: total
+        - name: digital_solutions_spend
+          alias: ds
+
+  - name: digital_solutions_share
+    label: "Digital Solutions Share of Total"
+    description: "Digital Solutions spend divided by total spend"
+    type: ratio
+    type_params:
+      numerator: digital_solutions_spend
+      denominator: total_spend

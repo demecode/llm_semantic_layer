@@ -11,7 +11,7 @@ from datetime import date, time
 from eng.logger import logger
 from eng.semantics.dbt_metric_ldr import load_dbt_metrics
 from eng.semantics.dbt_semantics import load_metrics_semantic_models_and_nodes
-
+from eng.presentation.summaries import summarise_timeseries
 
 
 app = FastAPI(title="LLM x1")
@@ -137,10 +137,10 @@ def chat(req: ChatRequest):
 
     if "error" in result:
         return ChatResponse(answer=result["error"])
-
-    # Simple response for now (we’ll improve narrative + chart formatting next)
+    
+    summary = summarise_timeseries(metric, result["rows"])
     return ChatResponse(
-        answer=f"I ran metric '{metric}' with params {params}.",
+        answer=summary
         meta=result["meta"],
         data=result["rows"],
     )
