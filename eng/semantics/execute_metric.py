@@ -26,7 +26,7 @@ def execute_metric(metric_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
     if not chosen_sm:
         return {"error": f"Could not resolve semantic model for metric '{metric_name}'"}
 
-    sql, meta = build_metric_timeseries_sql(metric, chosen_sm, nodes, params)
+    sql, meta = build_metric_timeseries_sql(metric, chosen_sm, nodes, params, metrics_by_name)
     rows = run_query(sql)
 
     return {"meta": meta, "sql": sql, "rows": rows}

@@ -30,9 +30,6 @@ class KpiResponse(BaseModel):
     total_spend_gbp: float
 
 
-
-# ... you already have TimeSeriesPoint and KpiResponse
-
 class VendorSpend(BaseModel):
     vendor_name: str
     total_spend_gbp: float
@@ -140,7 +137,7 @@ def chat(req: ChatRequest):
     
     summary = summarise_timeseries(metric, result["rows"])
     return ChatResponse(
-        answer=summary
+        answer=summary,
         meta=result["meta"],
         data=result["rows"],
     )
@@ -193,47 +190,42 @@ def debug_manifest():
 
 from eng.semantics.metric_sql import build_metric_timeseries_sql
 from eng.databricks_client import run_query
+from fastapi import Query, HTTPException
 
 
 @app.get("/metric/{metric_name}")
-def run_metric(
+def get_metric(
     metric_name: str,
-    grain: str = "month",
-    start_date: str | None = None,
-    end_date: str | None = None,
+    grain: str = Query(default="month"),
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
 ):
-    # 1) Load dbt artifacts
+    """
+    Execute a governed dbt metric and return time series data.
+    Supports simple, derived, and ratio metrics.
+    """
+
+    # ---- Load dbt semantic context ----
     metrics, semantic_models, nodes = load_metrics_semantic_models_and_nodes()
 
-    # 2) Find the metric by name
-    metric = next(
-        (m for m in metrics.values() if m.get("name") == metric_name),
-        None,
-    )
+    metrics_by_name = {
+        m.get("name"): m
+        for m in metrics.values()
+        if m.get("name")
+    }
+
+    metric = metrics_by_name.get(metric_name)
     if not metric:
-        return {"error": f"Metric not found: {metric_name}"}
+        raise HTTPException(status_code=404, detail=f"Unknown metric '{metric_name}'")
 
-    # 3) Resolve semantic model (by measure)
-    from eng.semantics.metric_sql import normalize_measure_name
+    # ---- Resolve semantic model ----
+    # MVP assumption: one semantic model
+    if not semantic_models:
+        raise HTTPException(status_code=500, detail="No semantic models found")
 
-    measure_obj = (metric.get("type_params") or {}).get("measure")
-    measure_name = normalize_measure_name(measure_obj)
+    semantic_model = next(iter(semantic_models.values()))
 
-    chosen_sm = None
-    for sm in semantic_models.values():
-        for meas in sm.get("measures", []):
-            if meas.get("name") == measure_name:
-                chosen_sm = sm
-                break
-        if chosen_sm:
-            break
-
-    if not chosen_sm:
-        return {
-            "error": f"Could not resolve semantic model for metric '{metric_name}'"
-        }
-
-    # 4) Build SQL using dbt semantics
+    # ---- Build SQL via semantic layer ----
     params = {
         "grain": grain,
         "start_date": start_date,
@@ -242,16 +234,17 @@ def run_metric(
 
     sql, meta = build_metric_timeseries_sql(
         metric=metric,
-        semantic_model=chosen_sm,
+        semantic_model=semantic_model,
         nodes=nodes,
         params=params,
+        metrics_by_name=metrics_by_name,
     )
 
-    # 5) Execute SQL
-    rows = run_query(sql)
+    # ---- Execute SQL ----
+    rows =run_query(sql)
 
     return {
         "meta": meta,
-        "sql": sql,
+        "sql": sql,        # keep for demo/debug; hide later if needed
         "rows": rows,
     }
