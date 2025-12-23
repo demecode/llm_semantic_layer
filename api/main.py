@@ -17,6 +17,8 @@ from eng.databricks_client import run_query
 
 app = FastAPI(title="LLM x1")
 
+from eng.routing.health import router as health_router
+app.include_router(health_router)
 
 class TimeSeriesPoint(BaseModel):
     month: str
