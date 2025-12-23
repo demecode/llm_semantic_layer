@@ -12,8 +12,12 @@ from typing import Any, Dict, List, Optional, Tuple
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+# Also include the API package root for imports
+API_DIR = ROOT / "api"
+if str(API_DIR) not in sys.path:
+    sys.path.insert(0, str(API_DIR))
 
-from eng.llm_ollama import route_with_ollama
+from api.eng.routing.route_with_ollama import route_with_ollama
 
 
 @dataclass

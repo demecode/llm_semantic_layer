@@ -1,0 +1,21 @@
+export type TimeseriesPoint = { period: string; value: number };
+
+export type ChatResponse = {
+  answer: string;
+  kpis?: Record<string, any> | null;
+  series?: { name: string; data: TimeseriesPoint[] }[] | null;
+  chart?: { type: string; x: string; y: string; unit?: string } | null;
+  meta?: any;
+  data?: any;
+};
+
+export type MetricsResponse = {
+  metrics: {
+    name: string;
+    label?: string;
+    description?: string;
+    type?: string;
+    time_grains?: string[];
+    filter?: any;
+  }[];
+};

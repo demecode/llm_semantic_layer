@@ -2,13 +2,16 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 
+_DEFAULT_MANIFEST = Path(__file__).resolve().parents[3] / "dbt" / "target" / "manifest.json"
 
-def load_dbt_metrics(manifest_path: str = "target/manifest.json") -> Dict[str, Dict[str, Any]]:
+
+def load_dbt_metrics(manifest_path: str | Path = _DEFAULT_MANIFEST) -> Dict[str, Dict[str, Any]]:
     """
     Returns a dict keyed by metric name.
     Metric objects come from dbt's manifest.json "metrics" section.
     """
-    manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+    manifest_path = Path(manifest_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
     metrics: Dict[str, Dict[str, Any]] = {}
     for metric_id, metric in (manifest.get("metrics") or {}).items():

@@ -1,17 +1,18 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Query, HTTPException
 from pydantic import BaseModel
-from typing import List, Dict, Any
-
-from .databricks_client import run_query
-from eng.llm_ollama import route_with_ollama
-
-from typing import Optional
-from pydantic import BaseModel
+from typing import List, Dict, Any, Optional
 from datetime import date, time
+
+from eng.routing.route_with_ollama import route_with_ollama
 from eng.logger import logger
-from eng.semantics.dbt_metric_ldr import load_dbt_metrics
-from eng.semantics.dbt_semantics import load_metrics_semantic_models_and_nodes
+from eng.semantics.dbt_semantics import (
+    load_manifest,
+    load_metrics_semantic_models_and_nodes,
+    list_metrics,
+)
 from eng.presentation.summaries import summarise_timeseries
+from eng.utils.date_ranges import apply_relative_date_filters
+from eng.databricks_client import run_query
 
 
 app = FastAPI(title="LLM x1")
@@ -96,29 +97,32 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     answer: str
+    kpis: Optional[Dict[str, Any]] = None
+    series: Optional[List[Dict[str, Any]]] = None
+    chart: Optional[Dict[str, Any]] = None
     meta: Optional[Dict[str, Any]] = None
     data: Optional[List[Dict[str, Any]]] = None
-    # kpi: Optional[KpiResponse] = None
-    # vendor_kpi: Optional[VendorKpiResponse] = None
 
 
-
-from eng.llm_ollama import route_with_ollama 
 from eng.semantics.execute_metric import execute_metric
 from eng.semantics.dbt_semantics import list_metrics
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
+    print("🔥 CHAT ENDPOINT HIT 🔥")
     q = req.question
-
     routing = route_with_ollama(q)
-    metric = routing.get("metric", "unknown")
-    params = routing.get("params", {}) or {}
 
-    logger.info(f"/chat q={q!r} metric={metric} params={params}")
+    intent = routing.get("intent", "unknown")
+    params = routing.get("params", {}) or {}
+    params = apply_relative_date_filters(q, params)
+    logger.info(f"/chat final_params={params}")
+    routing["params"] = params
+
+
 
     # Unknown → show governed options
-    if metric == "unknown":
+    if intent == "unknown":
         available = ", ".join(m["name"] for m in list_metrics())
         return ChatResponse(
             answer=(
@@ -130,19 +134,105 @@ def chat(req: ChatRequest):
             )
         )
 
-    result = execute_metric(metric, params)
+    if intent == "comparison":
+        left = routing["left_metric"]
+        right = routing["right_metric"]
+        params = routing["params"]
+
+        left_result = execute_metric(left, params)
+        right_result = execute_metric(right, params)
+
+        if "error" in left_result:
+            return ChatResponse(answer=left_result["error"])
+        if "error" in right_result:
+            return ChatResponse(answer=right_result["error"])
+
+        def display_name(metric_name: str) -> str:
+            # nicer demo labels
+            if metric_name == "rest_of_company_spend":
+                return "Rest of Company"
+            if metric_name == "digital_solutions_spend":
+                return "Digital Solutions"
+            if metric_name.endswith("_spend"):
+                return metric_name.replace("_spend", "").replace("_", " ").title()
+            return metric_name.replace("_", " ").title()
+
+        def latest_and_mom(rows: list[dict]):
+            if not rows:
+                return None, None, None
+            latest_period = rows[-1].get("period")
+            latest_val = rows[-1].get("value")
+            prev_val = rows[-2].get("value") if len(rows) >= 2 else None
+            mom = ((latest_val - prev_val) / prev_val) if (prev_val not in (None, 0)) else None
+            return latest_period, latest_val, mom
+
+        left_rows = left_result.get("rows") or []
+        right_rows = right_result.get("rows") or []
+
+        left_period, left_latest, left_mom = latest_and_mom(left_rows)
+        right_period, right_latest, right_mom = latest_and_mom(right_rows)
+
+        # Prefer a period that exists (they should align, but be safe)
+        latest_period = left_period or right_period
+
+        left_latest = float(left_latest or 0)
+        right_latest = float(right_latest or 0)
+
+        total_latest = left_latest + right_latest
+        share_latest = (left_latest / total_latest) if total_latest else 0.0
+
+        # Friendly summary text
+        period_txt = latest_period[:10] if isinstance(latest_period, str) else "the latest period"
+        answer = (
+            f"In {period_txt}, {display_name(left)} accounted for {share_latest:.1%} "
+            f"of total company spend."
+        )
+
+        kpis = {
+            "period_latest": period_txt,
+            "left_metric": left,
+            "right_metric": right,
+            "left_latest_gbp": left_latest,
+            "right_latest_gbp": right_latest,
+            "total_latest_gbp": total_latest,
+            "left_share_latest": share_latest,
+            "left_mom_change_pct": (left_mom * 100) if left_mom is not None else None,
+            "right_mom_change_pct": (right_mom * 100) if right_mom is not None else None,
+        }
+
+        return ChatResponse(
+            answer=answer,
+            kpis=kpis,
+            series=[
+                {"name": display_name(left), "data": left_rows},
+                {"name": display_name(right), "data": right_rows},
+            ],
+            chart={
+                "type": "line",
+                "x": "period",
+                "y": "value",
+                "unit": "GBP",
+            },
+        )
+    if intent == "metric":
+        metric_name = routing.get("metric")
+        logger.info(f"INTENT={intent} METRIC={routing.get('metric')}")
+        if not metric_name:
+                return ChatResponse(answer="No metric resolved.")
+
+        result = execute_metric(metric_name, params)
 
     if "error" in result:
         return ChatResponse(answer=result["error"])
-    
-    summary = summarise_timeseries(metric, result["rows"])
-    return ChatResponse(
-        answer=summary,
-        meta=result["meta"],
-        data=result["rows"],
-    )
 
-from .databricks_client import run_query
+    answer = summarise_timeseries(metric_name, result.get("rows") or [])
+    return ChatResponse(
+        answer=answer,
+        series=[{"name": metric_name.replace("_", " ").title(), "data": result.get("rows") or []}],
+        chart={"type": "line", "x": "period", "y": "value", "unit": "GBP"},
+        meta=result.get("meta"),
+        data=result.get("rows") or [],
+    )
 
 @app.get("/kpi/top-vendors", response_model=VendorKpiResponse)
 def top_vendors(limit: int = 10):
@@ -169,13 +259,10 @@ def top_vendors(limit: int = 10):
     return VendorKpiResponse(sql=sql, vendors=vendors)
 
 
-from eng.semantics.dbt_semantics import list_metrics
-
 @app.get("/metrics")
 def metrics():
     return {"metrics": list_metrics()}
 
-from eng.semantics.dbt_semantics import load_manifest
 @app.get("/debug/manifest")
 def debug_manifest():
     m = load_manifest()
@@ -189,7 +276,6 @@ def debug_manifest():
 
 
 from eng.semantics.metric_sql import build_metric_timeseries_sql
-from eng.databricks_client import run_query
 from fastapi import Query, HTTPException
 
 
