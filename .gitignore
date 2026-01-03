@@ -63,3 +63,5 @@ profiles.yaml
 .user.yml
 dbt/profiles.yml
 .env
+.env
+dbt/profiles.yml
