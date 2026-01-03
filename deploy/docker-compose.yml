@@ -6,7 +6,9 @@ services:
     env_file:
       - ../.env
     environment:
-      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_CHAT_ENDPOINT=http://ollama:11434/api/chat
+      - OLLAMA_MODEL=llama3.2:3b
     volumes:
       - ../dbt/target:/app/dbt/target:ro
     ports:
@@ -31,6 +33,12 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
+    healthcheck:
+      # Don't fail just because there are no models yet
+      test: ["CMD-SHELL", "ollama --version >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
 
 volumes:
   ollama_data:

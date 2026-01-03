@@ -4,7 +4,7 @@ import requests
 from typing import Any, Dict
 
 from eng.semantics.dbt_semantics import list_metrics
-from eng.config import OLLAMA_GENERATE_ENDPOINT, MODEL_NAME, LLM_TIMEOUT_SECONDS
+from eng.config import OLLAMA_CHAT_ENDPOINT, MODEL_NAME, LLM_TIMEOUT_SECONDS
 
 FORBIDDEN_PATTERNS = re.compile(
     r"\b(forecast|predict|prediction|next quarter|next month|next year|why|explain|reason|cause|root cause|write sql|show sql|give me sql|raw data|dump data|ignore rules|bypass)\b",
@@ -136,15 +136,22 @@ Return ONLY the JSON object.
     }
 
     resp = requests.post(
-        OLLAMA_GENERATE_ENDPOINT,
+        OLLAMA_CHAT_ENDPOINT,
         json=body,
         timeout=LLM_TIMEOUT_SECONDS,
     )
     resp.raise_for_status()
     data = resp.json()
 
-    # OpenAI-style response
-    content = (data["choices"][0]["message"]["content"] or "").strip()
+    # Ollama /api/chat format:
+    # { "message": { "content": "..." }, ... }
+    content = ((data.get("message") or {}).get("content") or "").strip()
+
+    # Optional: support OpenAI-compatible format if you ever switch endpoints
+    if not content and "choices" in data:
+        content = (
+            ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+        ).strip()
 
     # Parse JSON safely 
     try:

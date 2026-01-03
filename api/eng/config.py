@@ -8,11 +8,12 @@ ENV = os.getenv("ENV", "dev")
 # -----------------------------
 # Ollama (LLM)
 # -----------------------------
+import os
 
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-OLLAMA_GENERATE_ENDPOINT = f"{OLLAMA_HOST}/v1/chat/completions"
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://ollama:11434").rstrip("/")
+OLLAMA_CHAT_ENDPOINT = os.getenv("OLLAMA_CHAT_ENDPOINT", f"{OLLAMA_HOST}/api/chat")
 
-MODEL_NAME = os.getenv("MODEL_NAME", "llama3.1")
+MODEL_NAME = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 LLM_TIMEOUT_SECONDS = int(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
 # -----------------------------
 # dbt Semantic Layer
