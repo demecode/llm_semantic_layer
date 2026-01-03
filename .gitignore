@@ -65,3 +65,5 @@ dbt/profiles.yml
 .env
 .env
 dbt/profiles.yml
+
+llm_co/profiles.yml
