@@ -19,3 +19,13 @@ export type MetricsResponse = {
     filter?: any;
   }[];
 };
+
+export type SemanticModelsResponse = {
+  semantic_models: Array<{
+    name: string;
+    description?: string;
+    measures: string[];
+    dimensions: string[];
+    relation?: string | null;
+  }>;
+};

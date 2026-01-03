@@ -47,6 +47,9 @@ metrics:
     type: simple
     type_params:
       measure: spend_gbp
+    meta:
+      visibility:
+        roles: ["finance", "exec"]
 
   - name: digital_solutions_spend
     label: "Digital Solutions Spend (GBP)"
@@ -56,6 +59,9 @@ metrics:
       measure: spend_gbp
     filter: |
       line_of_business = 'Digital Solutions'
+    meta:
+      visibility:
+        roles: ["finance", "product","exec"]
 
   - name: rest_of_company_spend
     label: "Rest of Company Spend (GBP)"
@@ -68,6 +74,9 @@ metrics:
           alias: total
         - name: digital_solutions_spend
           alias: ds
+    meta:
+      visibility:
+        roles: ["finance", "exec"]
 
   - name: digital_solutions_share
     label: "Digital Solutions Share of Total"
@@ -76,3 +85,6 @@ metrics:
     type_params:
       numerator: digital_solutions_spend
       denominator: total_spend
+    meta:
+      visibility:
+        roles: ["exec"]

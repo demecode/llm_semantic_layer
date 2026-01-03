@@ -36,3 +36,30 @@ def list_metrics() -> List[Dict[str, Any]]:
     out = [x for x in out if x["name"]]
     out.sort(key=lambda x: x["name"])
     return out
+
+def list_semantic_models() -> list[dict]:
+    """
+    Read-only registry of dbt semantic models.
+    """
+    _, semantic_models, nodes = load_metrics_semantic_models_and_nodes()
+
+    out = []
+
+    for sm in semantic_models.values():
+        model_ref = sm.get("model")
+        relation = None
+
+        # Resolve physical relation (same logic you already use)
+        if model_ref and model_ref in nodes:
+            n = nodes[model_ref]
+            relation = f"{n['database']}.{n['schema']}.{n['name']}"
+
+        out.append({
+            "name": sm.get("name"),
+            "description": sm.get("description", ""),
+            "measures": [m["name"] for m in sm.get("measures", [])],
+            "dimensions": [d["name"] for d in sm.get("dimensions", [])],
+            "relation": relation,
+        })
+
+    return out

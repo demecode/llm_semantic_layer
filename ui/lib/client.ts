@@ -13,3 +13,9 @@ export async function getMetrics() {
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 }
+
+export async function getSemanticModels() {
+  const r = await fetch("/api/semantic-models");
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}

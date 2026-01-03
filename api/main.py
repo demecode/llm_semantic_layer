@@ -13,6 +13,7 @@ from eng.semantics.dbt_semantics import (
 from eng.presentation.summaries import summarise_timeseries
 from eng.utils.date_ranges import apply_relative_date_filters
 from eng.databricks_client import run_query
+from eng.semantics.dbt_semantics import list_semantic_models
 
 
 app = FastAPI(title="LLM x1")
@@ -47,6 +48,13 @@ class VendorKpiResponse(BaseModel):
 def health():
     return {"status": "ok"}
 
+
+
+@app.get("/semantic-models")
+def semantic_models():
+    return {
+        "semantic_models": list_semantic_models()
+    }
 
 @app.get("/kpi/digital-solutions-spend-vs-total", response_model=KpiResponse)
 def digital_solutions_spend_vs_total(

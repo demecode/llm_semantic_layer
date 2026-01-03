@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { ChatResponse, MetricsResponse } from "@/lib/type";
-import { postChat, getMetrics } from "@/lib/client";
+import type { ChatResponse, MetricsResponse, SemanticModelsResponse } from "@/lib/type";
+import { postChat, getMetrics, getSemanticModels } from "@/lib/client";
 import KpiCards from "@/components/KpiCards";
 import TimeseriesChart from "@/components/TimeseriesChart";
 import DebugDrawer from "@/components/DebugDrawer";
@@ -15,6 +15,7 @@ const EXAMPLE_QUESTIONS = [
   "Show Digital Solutions spend vs the rest of the company for the last 2 years",
   "Show total spend for the last 6 months",
 ];
+
 
 export default function Page() {
   const [question, setQuestion] = useState("");
@@ -43,6 +44,14 @@ export default function Page() {
     }
   }
 
+const [semanticModels, setSemanticModels] = useState<SemanticModelsResponse | null>(null);
+
+useEffect(() => {
+  getMetrics().then(setMetrics).catch((e) => setErr(String(e)));
+  getSemanticModels().then(setSemanticModels).catch((e) => setErr(String(e)));
+}, [])
+
+
   return (
     <div className="min-h-screen bg-gray-100">
       <div className="max-w-6xl mx-auto p-6">
@@ -61,6 +70,20 @@ export default function Page() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+        <div className="rounded-2xl border bg-white p-3 shadow-sm w-[360px]">
+          <div className="text-sm font-semibold mb-2">Semantic models</div>
+          <div className="text-xs text-gray-600 space-y-2 max-h-[180px] overflow-auto">
+            {(semanticModels?.semantic_models || []).map((sm) => (
+              <div key={sm.name} className="border rounded-xl p-2">
+                <div className="font-mono text-xs">{sm.name}</div>
+                {sm.relation && <div className="text-[11px] text-gray-500">{sm.relation}</div>}
+                <div className="text-[11px] text-gray-500 mt-1">
+                  measures: {sm.measures.join(", ")}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
