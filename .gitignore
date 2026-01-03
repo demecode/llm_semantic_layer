@@ -61,3 +61,5 @@ target/
 profiles.yml
 profiles.yaml
 .user.yml
+dbt/profiles.yml
+.env

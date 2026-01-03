@@ -1,0 +1,19 @@
+llm_co:
+  target: dev
+
+  outputs:
+    dev:
+      type: databricks
+
+      # Databricks workspace catalog to use
+      catalog: llm-v1
+
+      # Target schema where dbt models will be built
+      schema: analytics
+
+      # Connection details (must be set as environment variables)
+      host: "{{ env_var('DATABRICKS_SERVER_HOSTNAME') }}"
+      http_path: "{{ env_var('DATABRICKS_HTTP_PATH') }}"
+      token: "{{ env_var('DATABRICKS_TOKEN') }}"
+
+      threads: 1
