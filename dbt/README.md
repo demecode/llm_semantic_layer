@@ -18,3 +18,8 @@ Try running the following commands:
 export DATABRICKS_SERVER_HOSTNAME=dbc-xxxx.cloud.databricks.com
 export DATABRICKS_HTTP_PATH=/sql/1.0/warehouses/xxxxx
 export DATABRICKS_TOKEN=databricks_pat_here
+
+cp .env.example .env
+cp dbt/profiles.yml.example dbt/profiles.yml
+set -a; source .env; set +a
+dbt debug --project-dir dbt --profiles-dir dbt
