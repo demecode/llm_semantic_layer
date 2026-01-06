@@ -10,7 +10,7 @@ An open-core prototype of a governed semantic analytics agent. Users ask natural
 - Deterministic SQL generation
 - LLM routing (Ollama-compatible)
 
-This is not a chatbot over raw data; it’s a semantic, contract-driven analytics system.
+ it’s a semantic, contract-driven analytics system.
 
 ## Repo Layout
 ```
