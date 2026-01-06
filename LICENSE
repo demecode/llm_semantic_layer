@@ -1,0 +1,68 @@
+Business Source License 1.1
+
+License text copyright © 2017 MariaDB Corporation Ab
+
+⸻
+
+Licensor
+
+Demecode
+
+Licensed Work
+
+LayerX – LLM-Powered Semantic Analytics Platform
+
+This includes all source code, dbt models, semantic definitions, APIs, UI, and evaluation tooling contained in this repository.
+
+⸻
+
+Additional Use Grant
+
+You may use, modify, and run this software for internal use, including:
+	•	Local development
+	•	Internal analytics
+	•	Proofs of concept
+	•	Research and evaluation
+	•	Internal business intelligence
+
+⸻
+
+Restrictions (Important)
+
+You may not, without explicit written permission from the Licensor:
+	•	Offer LayerX (or a substantially similar service) as a hosted, managed, or SaaS offering
+	•	Sell, license, or commercialize LayerX as a standalone product
+	•	Embed LayerX in a competing analytics, BI, or semantic layer product
+	•	Circumvent or remove governance, access controls, or licensing checks
+
+In plain English:
+You can use it. You can’t resell it or run it as a competing service.
+
+⸻
+
+Change Date
+
+January 1, 2029
+
+⸻
+
+Change License
+
+On the Change Date, this software will automatically be made available under the:
+
+Apache License, Version 2.0
+
+⸻
+
+Terms
+
+This license grants rights only to the extent explicitly stated above.
+All other rights are reserved by the Licensor.
+
+⸻
+
+No Warranty
+
+THE LICENSED WORK IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+
+⸻
