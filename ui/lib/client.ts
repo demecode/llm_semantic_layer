@@ -19,3 +19,10 @@ export async function getSemanticModels() {
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 }
+
+export async function runPack(packId: string) {
+  const r = await fetch(`/api/packs/${packId}/run`, { method: "POST" });
+  const text = await r.text();
+  if (!r.ok) throw new Error(text);
+  return JSON.parse(text);
+}

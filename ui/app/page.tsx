@@ -7,6 +7,9 @@ import KpiCards from "@/components/KpiCards";
 import TimeseriesChart from "@/components/TimeseriesChart";
 import DebugDrawer from "@/components/DebugDrawer";
 
+import { runPack } from "@/lib/client";
+
+
 const EXAMPLE_QUESTIONS = [
   "Show total spend by month",
   "Show Digital Solutions spend by month",
@@ -30,12 +33,13 @@ export default function Page() {
       .catch((e) => setErr(String(e)));
   }, []);
 
-  async function onAsk() {
+  async function onRunPack() {
     setErr(null);
     setLoading(true);
     setResp(null);
     try {
-      const r = await postChat(question);
+      const r = await runPack("department_vs_company");
+      // const r = await postChat(question);
       setResp(r);
     } catch (e: any) {
       setErr(e?.message || String(e));
@@ -52,54 +56,72 @@ useEffect(() => {
 }, [])
 
 
+
+
   return (
     <div className="min-h-screen bg-gray-100">
       <div className="max-w-6xl mx-auto p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold">Governed Semantic Analytics Copilot</h1>
-            <p className="text-sm text-gray-600">Natural language → governed dbt metrics → chart + KPIs</p>
+            <p className="text-sm text-gray-600">
+              Natural language → governed dbt metrics → chart + KPIs
+            </p>
           </div>
-          <div className="rounded-2xl border bg-white p-3 shadow-sm w-[360px]">
-            <div className="text-sm font-semibold mb-2">Available metrics</div>
-            <div className="text-xs text-gray-600 space-y-1 max-h-[180px] overflow-auto">
-              {(metrics?.metrics || []).map((m) => (
-                <div key={m.name}>
-                  <span className="font-mono">{m.name}</span>{" "}
-                  <span className="text-gray-400">({m.type})</span>
-                </div>
-              ))}
+
+          {/* RIGHT SIDEBAR (stack cards vertically) */}
+          <div className="w-[360px] space-y-4 shrink-0">
+            <div className="rounded-2xl border bg-white p-3 shadow-sm">
+              <div className="text-sm font-semibold mb-2">Available metrics</div>
+              <div className="text-xs text-gray-600 space-y-1 max-h-[180px] overflow-auto">
+                {(metrics?.metrics || []).map((m) => (
+                  <div key={m.name}>
+                    <span className="font-mono">{m.name}</span>{" "}
+                    <span className="text-gray-400">({m.type})</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border bg-white p-3 shadow-sm">
+              <div className="text-sm font-semibold mb-2">Semantic models</div>
+              <div className="text-xs text-gray-600 space-y-2 max-h-[180px] overflow-auto">
+                {(semanticModels?.semantic_models || []).map((sm) => (
+                  <div key={sm.name} className="border rounded-xl p-2">
+                    <div className="font-mono text-xs">{sm.name}</div>
+                    {sm.relation && (
+                      <div className="text-[11px] text-gray-500">{sm.relation}</div>
+                    )}
+                    <div className="text-[11px] text-gray-500 mt-1">
+                      measures: {sm.measures.join(", ")}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
-        <div className="rounded-2xl border bg-white p-3 shadow-sm w-[360px]">
-          <div className="text-sm font-semibold mb-2">Semantic models</div>
-          <div className="text-xs text-gray-600 space-y-2 max-h-[180px] overflow-auto">
-            {(semanticModels?.semantic_models || []).map((sm) => (
-              <div key={sm.name} className="border rounded-xl p-2">
-                <div className="font-mono text-xs">{sm.name}</div>
-                {sm.relation && <div className="text-[11px] text-gray-500">{sm.relation}</div>}
-                <div className="text-[11px] text-gray-500 mt-1">
-                  measures: {sm.measures.join(", ")}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
 
-        <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* MAIN GRID */}
+        <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4 min-w-0">
           <div className="lg:col-span-1 rounded-2xl border bg-white p-4 shadow-sm">
             <div className="text-sm font-semibold mb-2">Ask</div>
+              <button
+                onClick={onRunPack}
+                disabled={loading}
+                className="w-full rounded-xl border py-2 text-sm bg-white hover:bg-gray-50"
+              >
+                {loading ? "Running..." : "Run: Digital Solutions vs Company (Pack)"}
+              </button>
             <textarea
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               className="w-full border rounded-xl p-3 text-sm min-h-[120px]"
               placeholder="e.g. Show Digital Solutions spend vs the rest of the company for the last 2 years"
             />
+
             <div className="mt-3">
-              <div className="text-xs font-semibold text-gray-600 mb-2">
-                Try these:
-              </div>
+              <div className="text-xs font-semibold text-gray-600 mb-2">Try these:</div>
               <div className="flex flex-wrap gap-2">
                 {EXAMPLE_QUESTIONS.map((q) => (
                   <button
@@ -113,8 +135,9 @@ useEffect(() => {
                 ))}
               </div>
             </div>
+
             <button
-              onClick={onAsk}
+              onClick={onRunPack}
               disabled={loading || !question.trim()}
               className="mt-3 w-full rounded-xl bg-black text-white py-2 text-sm disabled:opacity-50"
             >
@@ -133,7 +156,8 @@ useEffect(() => {
             <DebugDrawer debug={resp} />
           </div>
 
-          <div className="lg:col-span-2 space-y-4">
+          {/* IMPORTANT: min-w-0 so Recharts can measure correctly */}
+          <div className="lg:col-span-2 space-y-4 min-w-0">
             <KpiCards kpis={resp?.kpis} />
             <TimeseriesChart series={resp?.series} />
           </div>

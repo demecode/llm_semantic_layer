@@ -1,0 +1,30 @@
+id: top_vendors
+title: "Top Vendors by Spend"
+description: "Ranks vendors by total spend for a time range."
+kind: top_n
+
+defaults:
+  limit: 10
+  start_period: "last_12_months"
+  metric: total_spend
+  group_by: vendor_name
+  grain: month
+
+inputs:
+  - name: limit
+    type: int
+    min: 1
+    max: 50
+  - name: start_date
+    type: date
+    optional: true
+  - name: end_date
+    type: date
+    optional: true
+
+query:
+  source_model: fct_po_spend
+  value_column: value_in_gbp
+  group_column: vendor_name
+  time_column: po_creation_date
+  agg: sum

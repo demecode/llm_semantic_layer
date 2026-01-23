@@ -21,19 +21,27 @@ const COLORS = [
   "#ea580c", // orange
 ];
 
-type Point = { period: string; value: number | string };
-type Series = { name: string; data: Point[] };
 
-function parseToMs(period: string) {
-  // Normalize "2025-01-01 00:00:00+00:00" -> "2025-01-01T00:00:00+00:00"
-  const s = String(period).trim().replace(" ", "T");
+function normalizePeriod(raw: string): number | null {
+  if (!raw) return null;
+
+  // common formats we see:
+  // 1) 2025-02-01T00:00:00Z
+  // 2) 2025-02-01 00:00:00+00:00
+  // 3) 2025-02-01T00:00:00+00:00
+
+  let s = raw.trim();
+
+  // convert " " -> "T" for ISO-ish strings
+  if (s.includes(" ") && !s.includes("T")) s = s.replace(" ", "T");
+
+  // normalize UTC offset form to Z when possible (most compatible)
+  s = s.replace(/\+00:00$/, "Z");
+
   const ms = Date.parse(s);
-  return Number.isFinite(ms) ? ms : null;
-}
+  if (!Number.isFinite(ms)) return null;
 
-function fmtMonth(ms: number) {
-  // "2025-02"
-  return new Date(ms).toISOString().slice(0, 7);
+  return ms;
 }
 
 function mergeSeries(series: Series[]) {
@@ -41,59 +49,64 @@ function mergeSeries(series: Series[]) {
 
   for (const s of series) {
     for (const p of s.data || []) {
-      const ms = parseToMs(p.period);
-      if (ms === null) continue;
+      const ts = normalizePeriod(String(p.period));
+      if (ts === null) continue;
 
       const n = typeof p.value === "number" ? p.value : Number(p.value);
       if (!Number.isFinite(n)) continue;
 
-      const key = ms; // canonical X key
-      const row = map.get(key) || { t: key, label: fmtMonth(key) };
-      row[s.name.trim()] = n;
-      map.set(key, row);
+      const row = map.get(ts) || { ts };
+      row[s.name] = n;
+      map.set(ts, row);
     }
   }
 
-  return Array.from(map.values()).sort((a, b) => a.t - b.t);
+  return Array.from(map.values()).sort((a, b) => a.ts - b.ts);
 }
 
-export default function TimeseriesChart({
-  series,
-}: {
-  series: Series[] | null | undefined;
-}) {
+
+
+export default function TimeseriesChart({ series }: { series: Series[] | null | undefined }) {
   if (!series || series.length === 0) return null;
 
   const data = mergeSeries(series);
 
   return (
-    <div className="rounded-2xl border p-4 bg-white shadow-sm h-[360px]">
+    <div className="rounded-2xl border p-4 bg-white shadow-sm">
       <div className="text-sm font-semibold mb-2">Trend</div>
 
-      <ResponsiveContainer width="100%" height="100%">
+      {/* IMPORTANT: explicit pixel height on the container */}
+      <div className="w-full" style={{ height: 320 }}>
+        <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data}>
-          <XAxis dataKey="t" type="number" scale="time" tick={{ fontSize: 12 }}
-                tickFormatter={(ms) => fmtMonth(Number(ms))} />
-          <YAxis tick={{ fontSize: 12 }} />
+          <XAxis
+            dataKey="ts"
+            type="number"
+            scale="time"
+            domain={["dataMin", "dataMax"]}
+            tickFormatter={(v) =>
+              new Date(v).toISOString().slice(0, 7) // YYYY-MM
+            }
+          />
+          <YAxis />
           <Tooltip
-            labelFormatter={(ms) => fmtMonth(Number(ms))}
-            formatter={(v: any) => {
-              const n = typeof v === "number" ? v : Number(v);
-              if (!Number.isFinite(n)) return v;
-              return n.toLocaleString("en-GB", {
+            labelFormatter={(v) =>
+              new Date(Number(v)).toISOString().slice(0, 10)
+            }
+            formatter={(v: number) =>
+              v.toLocaleString("en-GB", {
                 style: "currency",
                 currency: "GBP",
                 maximumFractionDigits: 0,
-              });
-            }}
+              })
+            }
           />
           <Legend />
 
           {series.map((s, i) => (
             <Line
               key={s.name}
-              type="monotone"
-              dataKey={s.name.trim()}
+              dataKey={s.name}
               stroke={COLORS[i % COLORS.length]}
               strokeWidth={3}
               dot={false}
@@ -101,7 +114,8 @@ export default function TimeseriesChart({
             />
           ))}
         </LineChart>
-      </ResponsiveContainer>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }

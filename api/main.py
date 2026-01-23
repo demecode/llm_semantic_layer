@@ -344,3 +344,23 @@ def get_metric(
         "sql": sql,        # keep for demo/debug; hide later if needed
         "rows": rows,
     }
+
+
+from eng.packs.registry import list_packs, get_pack
+from eng.packs.execute_pack import run_pack
+
+@app.get("/packs")
+def packs():
+    return {"packs": list_packs()}
+
+@app.post("/packs/{pack_id}/run")
+def run_pack_endpoint(pack_id: str):
+    try:
+        pack = get_pack(pack_id)
+    except KeyError as e:
+        return {"error": str(e)}
+
+    out = run_pack(pack)
+    if "error" in out:
+        return {"error": out["error"]}
+    return out

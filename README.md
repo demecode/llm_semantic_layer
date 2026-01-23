@@ -1,4 +1,4 @@
-# Governed Semantic Analytics  (dbt + LLM)
+# Governed Semantic Analytics Copilot (dbt + LLM)
 
 An open-core prototype of a governed semantic analytics agent. Users ask natural language questions like:
 

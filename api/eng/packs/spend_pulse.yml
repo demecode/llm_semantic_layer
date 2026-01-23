@@ -1,0 +1,39 @@
+id: spend_pulse
+title: Spend Pulse
+description: Exec-friendly spend overview with trends and share.
+defaults:
+  grain: month
+  window:
+    last_n_months: 12
+
+queries:
+  - id: total_spend_trend
+    metric: total_spend
+
+  - id: ds_spend_trend
+    metric: digital_solutions_spend
+
+  - id: ds_share_trend
+    metric: digital_solutions_share
+
+kpis:
+  - id: total_latest
+    from: total_spend_trend
+    op: latest_value
+
+  - id: total_mom_pct
+    from: total_spend_trend
+    op: mom_pct
+
+  - id: ds_share_latest
+    from: ds_share_trend
+    op: latest_value
+
+  - id: ds_share_change_pp
+    from: ds_share_trend
+    op: mom_change_pp
+
+narrative:
+  template: >
+    Total spend is {total_latest_gbp} ({total_mom_pct} MoM).
+    Digital Solutions share is {ds_share_latest_pct} ({ds_share_change_pp} pp MoM).
