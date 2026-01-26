@@ -67,3 +67,6 @@ dbt/profiles.yml
 dbt/profiles.yml
 
 llm_co/profiles.yml
+
+### Local architecture notes
+ARCHITECTURE.md
