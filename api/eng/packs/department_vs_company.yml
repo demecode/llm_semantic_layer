@@ -1,10 +1,12 @@
+intent: comparison
 id: department_vs_company
 title: Digital Solutions vs Rest of Company
 description: Compare Digital Solutions spend to the rest of the company over time.
 defaults:
   grain: month
   window:
-    last_n_months: 24
+    last_n_months: 12
+  anchor_end_date: "2025-10-01"
 
 comparison:
   left_metric: digital_solutions_spend

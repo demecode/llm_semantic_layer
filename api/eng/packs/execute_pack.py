@@ -17,6 +17,10 @@ from typing import Any, Dict, List, Optional, Tuple
 from dateutil.relativedelta import relativedelta
 
 from eng.semantics.execute_metric import execute_metric
+import logging
+logger = logging.getLogger("copilot")
+logger.propagate = True
+logger.setLevel(logging.INFO)
 
 
 def _iso(d: date) -> str:
@@ -30,17 +34,22 @@ def _default_window_params(pack: Dict[str, Any]) -> Dict[str, Any]:
     window = defaults.get("window") or {}
     last_n_months = window.get("last_n_months")
 
+    anchor_end = defaults.get("anchor_end_date")  # YYYY-MM-DD (optional)
+
     params: Dict[str, Any] = {"grain": grain}
 
     if last_n_months:
-        today = date.today()
-        start = today - relativedelta(months=int(last_n_months))
-        end = today + relativedelta(days=1)  # exclusive end
+        if anchor_end:
+            end = date.fromisoformat(anchor_end)
+        else:
+            end = date.today()
+
+        start = end - relativedelta(months=int(last_n_months))
+
         params["start_date"] = _iso(start)
-        params["end_date"] = _iso(end)
+        params["end_date"] = _iso(end + relativedelta(days=1))  # exclusive end
 
     return params
-
 
 def _latest(rows: List[Dict[str, Any]]) -> Optional[float]:
     if not rows:
@@ -124,8 +133,21 @@ def _fmt_pp(v: Optional[float]) -> str:
         return "n/a"
     return f"{v:+.1f} pp"
 
-
 def run_pack(pack: Dict[str, Any], overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    intent = (pack.get("intent") or "").lower()
+
+    if intent == "ranking":
+        return run_ranking_pack(pack, overrides)
+
+    if intent == "comparison":
+        return run_comparison_pack(pack, overrides)
+
+    return {
+        "error": f"Unsupported pack intent '{intent}'"
+    }
+
+def run_comparison_pack(pack: Dict[str, Any], overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+
     """
     Executes a comparison pack:
       - left_metric vs right_metric
@@ -135,17 +157,25 @@ def run_pack(pack: Dict[str, Any], overrides: Optional[Dict[str, Any]] = None) -
     if overrides:
         params.update({k: v for k, v in overrides.items() if v is not None})
 
+    logger.info("PACK start %s params=%s", pack.get("id"), params)
+
     comp = pack.get("comparison") or {}
     left_metric = comp.get("left_metric")
     right_metric = comp.get("right_metric")
     if not left_metric or not right_metric:
         return {"error": "Pack missing comparison.left_metric/right_metric"}
 
+    logger.info("PACK executing left_metric=%s", left_metric)
     left_result = execute_metric(left_metric, params)
+    logger.info("PACK left_metric done rows=%s", len(left_result.get("rows") or []))
+
     if "error" in left_result:
         return {"error": left_result["error"]}
 
+    logger.info("PACK executing right_metric=%s", right_metric)
     right_result = execute_metric(right_metric, params)
+    logger.info("PACK right_metric done rows=%s", len(right_result.get("rows") or []))
+
     if "error" in right_result:
         return {"error": right_result["error"]}
 
@@ -187,6 +217,7 @@ def run_pack(pack: Dict[str, Any], overrides: Optional[Dict[str, Any]] = None) -
     }
 
     return {
+        "pack_id": pack.get("id"),
         "answer": answer,
         "kpis": kpis,
         "series": [
@@ -194,14 +225,27 @@ def run_pack(pack: Dict[str, Any], overrides: Optional[Dict[str, Any]] = None) -
             {"name": "Rest of Company", "data": right_rows},
         ],
         "chart": {"type": "line", "x": "period", "y": "value", "unit": "GBP"},
+        "meta": {
+            "metrics": [left_metric, right_metric],
+            "grain": params.get("grain"),
+            "filters": {
+                "start_date": params.get("start_date"),
+                "end_date": params.get("end_date"),
+            },
+            # optional but useful if execute_metric includes it:
+            "contracts": {
+                "left": left_result.get("contract"),
+                "right": right_result.get("contract"),
+            },
+        },
         "debug": {
-            "pack_id": pack.get("id"),
             "params": params,
-            "left_contract": left_result.get("contract"),
-            "right_contract": right_result.get("contract"),
             "cache": {
                 "left": left_result.get("cache"),
                 "right": right_result.get("cache"),
             },
         },
     }
+
+def run_ranking_pack(pack, overrides=None):
+    return {"error": "Ranking packs not implemented yet"}

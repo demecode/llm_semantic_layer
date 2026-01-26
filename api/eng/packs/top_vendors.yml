@@ -1,3 +1,4 @@
+intent: comparison
 id: top_vendors
 title: "Top Vendors by Spend"
 description: "Ranks vendors by total spend for a time range."

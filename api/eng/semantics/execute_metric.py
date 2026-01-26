@@ -5,6 +5,18 @@ from eng.databricks_client import run_query
 
 from eng.cache import get as cache_get, set as cache_set
 from eng.semantics.manifest_utils import manifest_hash
+import concurrent.futures
+import time
+
+import logging
+import concurrent.futures
+import time
+
+logger = logging.getLogger("copilot")
+logger.setLevel(logging.INFO)
+logger.propagate = True
+
+
 
 
 def _resolve_base_metric(
@@ -57,6 +69,12 @@ def _rows_to_map(rows):
         out[str(p)] = float(r.get("value") or 0.0)
     return out
 
+
+
+def run_with_timeout(fn, timeout_s=60):
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+        fut = ex.submit(fn)
+        return fut.result(timeout=timeout_s)
 
 def execute_metric(metric_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
     mh = manifest_hash()
@@ -121,16 +139,9 @@ def execute_metric(metric_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
             results.append(res)
 
         # Align by period
-        def rows_to_map(rows):
-            out = {}
-            for r in rows or []:
-                p = r.get("period")
-                if p is None:
-                    continue
-                out[str(p)] = float(r.get("value") or 0.0)
-            return out
+        maps = [_rows_to_map(r.get("rows")) for r in results]
 
-        maps = [rows_to_map(r.get("rows")) for r in results]
+        
         periods = sorted(set().union(*[set(m.keys()) for m in maps]))
 
         rows = []
@@ -175,8 +186,34 @@ def execute_metric(metric_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
     # ------------------------
     # SIMPLE (and any others that compile to SQL directly)
     # ------------------------
+    # sql, meta = build_metric_timeseries_sql(metric, chosen_sm, nodes, params, metrics_by_name)
+    # rows = run_query(sql)
+
     sql, meta = build_metric_timeseries_sql(metric, chosen_sm, nodes, params, metrics_by_name)
-    rows = run_query(sql)
+
+    timeout_s = int(params.get("timeout_s") or 60)
+
+    def _exec():
+        return run_query(sql)
+
+    logger.info("METRIC start name=%s type=%s timeout_s=%s", metric_name, metric_type, timeout_s)
+    logger.info("METRIC sql name=%s sql=%s", metric_name, sql)
+
+    t0 = time.time()
+    try:
+        rows = run_with_timeout(_exec, timeout_s=timeout_s)
+    except concurrent.futures.TimeoutError:
+        return {
+            "error": (
+                f"Databricks query timed out after {timeout_s}s for metric '{metric_name}'. "
+                "Warehouse may be cold/suspended or query may be slow. "
+                "Try reducing the time window or increasing warehouse size."
+            )
+        }
+    except Exception as e:
+        return {"error": f"Databricks query failed for metric '{metric_name}': {e}"}
+    finally:
+        logger.info("METRIC end name=%s elapsed_s=%.2f", metric_name, time.time() - t0)
 
     contract = {
         "metric": metric_name,
