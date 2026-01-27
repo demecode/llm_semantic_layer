@@ -14,7 +14,12 @@ from eng.presentation.summaries import summarise_timeseries
 from eng.utils.date_ranges import apply_relative_date_filters
 from eng.databricks_client import run_query
 from eng.semantics.dbt_semantics import list_semantic_models
+import logging
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+)
 
 app = FastAPI(title="LLM x1")
 

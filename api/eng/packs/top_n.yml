@@ -1,0 +1,31 @@
+id: top_n
+name: Top-N Ranking
+description: Rank entities by a governed metric over a time range
+intent: ranking
+
+defaults:
+  n: 10
+  grain: year
+
+parameters:
+  metric:
+    type: metric
+    required: true
+  dimension:
+    type: dimension
+    required: true
+  n:
+    type: integer
+    default: 10
+  grain:
+    type: time_grain
+    default: year
+  start_date:
+    type: date
+    required: false
+  end_date:
+    type: date
+    required: false
+
+output:
+  type: ranking
