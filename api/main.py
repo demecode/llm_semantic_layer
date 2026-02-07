@@ -14,12 +14,8 @@ from eng.presentation.summaries import summarise_timeseries
 from eng.utils.date_ranges import apply_relative_date_filters
 from eng.databricks_client import run_query
 from eng.semantics.dbt_semantics import list_semantic_models
-import logging
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-)
+
 
 app = FastAPI(title="LLM x1")
 
@@ -122,11 +118,17 @@ class ChatResponse(BaseModel):
 from eng.semantics.execute_metric import execute_metric
 from eng.semantics.dbt_semantics import list_metrics
 
+def _unit_for_metric_type(metric_type: str) -> str:
+    t = (metric_type or "").lower()
+    return "PERCENT" if t == "ratio" else "GBP"
+
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
     print("🔥 CHAT ENDPOINT HIT 🔥")
     q = req.question
+    logger.info("CHAT HIT question=%r", q)
     routing = route_with_ollama(q)
+    logger.info("CHAT routing=%s", routing)
 
     intent = routing.get("intent", "unknown")
     params = routing.get("params", {}) or {}
@@ -138,6 +140,21 @@ def chat(req: ChatRequest):
 
     # Unknown → show governed options
     if intent == "unknown":
+        q_lower = (q or "").lower()
+        looks_like_unit_mix = (
+            ("share" in q_lower or "percent" in q_lower or "%" in q_lower)
+            and (" vs " in q_lower or "versus" in q_lower)
+            and ("spend" in q_lower)
+        )
+        if looks_like_unit_mix:
+            return ChatResponse(
+                answer=(
+                    "I can’t compare a *share (%)* metric against a *spend (£)* metric in one chart. "
+                    "Try either:\n"
+                    "• 'Show Digital Solutions share of total spend by month'\n"
+                    "• 'Show Digital Solutions spend vs the rest of the company by month'"
+                )
+            )
         available = ", ".join(m["name"] for m in list_metrics())
         return ChatResponse(
             answer=(
@@ -161,6 +178,29 @@ def chat(req: ChatRequest):
             return ChatResponse(answer=left_result["error"])
         if "error" in right_result:
             return ChatResponse(answer=right_result["error"])
+
+        left_type = (left_result.get("meta") or {}).get("type")
+        right_type = (right_result.get("meta") or {}).get("type")
+
+        left_unit = _unit_for_metric_type(left_type)
+        right_unit = _unit_for_metric_type(right_type)
+
+        if left_unit != right_unit:
+            return ChatResponse(
+                answer=(
+                    "I can’t compare those directly because they use different units "
+                    "(percent vs currency). Try either a share metric alone, or a spend "
+                    "vs spend comparison."
+                ),
+                series=[],
+                chart=None,
+                meta={
+                    "error": "unit_mismatch",
+                    "left_unit": left_unit,
+                    "right_unit": right_unit,
+                },
+                data=[],
+            )
 
         def display_name(metric_name: str) -> str:
             # nicer demo labels
@@ -241,10 +281,22 @@ def chat(req: ChatRequest):
         return ChatResponse(answer=result["error"])
 
     answer = summarise_timeseries(metric_name, result.get("rows") or [])
+
+
+    meta = result.get("meta") or {}
+    metric_type = (meta.get("type") or "").lower()
+
+    unit = "PERCENT" if metric_type == "ratio" else "GBP"
+
     return ChatResponse(
         answer=answer,
-        series=[{"name": metric_name.replace("_", " ").title(), "data": result.get("rows") or []}],
-        chart={"type": "line", "x": "period", "y": "value", "unit": "GBP"},
+        series=[
+            {
+                "name": metric_name.replace("_", " ").title(),
+                "data": result.get("rows") or [],
+            }
+        ],
+        chart={"type": "line", "x": "period", "y": "value", "unit": unit},
         meta=result.get("meta"),
         data=result.get("rows") or [],
     )

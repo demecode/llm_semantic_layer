@@ -8,42 +8,34 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  CartesianGrid,
 } from "recharts";
 
 type Point = { period: string; value: number };
-type Series = { name: string; data: Point[] };
-
-const COLORS = [
-  "#2563eb", // blue
-  "#dc2626", // red
-  "#16a34a", // green
-  "#7c3aed", // purple
-  "#ea580c", // orange
-];
-
+export type Series = { name: string; data: Point[] };
 
 function normalizePeriod(raw: string): number | null {
   if (!raw) return null;
-
-  // common formats we see:
-  // 1) 2025-02-01T00:00:00Z
-  // 2) 2025-02-01 00:00:00+00:00
-  // 3) 2025-02-01T00:00:00+00:00
-
-  let s = raw.trim();
-
-  // convert " " -> "T" for ISO-ish strings
+  let s = String(raw).trim();
   if (s.includes(" ") && !s.includes("T")) s = s.replace(" ", "T");
-
-  // normalize UTC offset form to Z when possible (most compatible)
   s = s.replace(/\+00:00$/, "Z");
-
   const ms = Date.parse(s);
-  if (!Number.isFinite(ms)) return null;
-
-  return ms;
+  return Number.isFinite(ms) ? ms : null;
 }
 
+function fmtYAxis(v: any, unit?: "GBP" | "PERCENT") {
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return String(v);
+
+  if (unit === "PERCENT") return `${(n * 100).toFixed(0)}%`;
+
+  // GBP (compact)
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000_000) return `£${(n / 1_000_000_000).toFixed(1)}b`;
+  if (abs >= 1_000_000) return `£${(n / 1_000_000).toFixed(1)}m`;
+  if (abs >= 1_000) return `£${(n / 1_000).toFixed(0)}k`;
+  return `£${n.toFixed(0)}`;
+}
 function mergeSeries(series: Series[]) {
   const map = new Map<number, any>();
 
@@ -64,59 +56,75 @@ function mergeSeries(series: Series[]) {
   return Array.from(map.values()).sort((a, b) => a.ts - b.ts);
 }
 
+function fmtMonth(ts: number) {
+  return new Date(ts).toISOString().slice(0, 7);
+}
 
+function fmtDay(ts: number) {
+  return new Date(ts).toISOString().slice(0, 10);
+}
 
-export default function TimeseriesChart({ series }: { series: Series[] | null | undefined }) {
+function fmtGBP(v: any) {
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return String(v);
+  return n.toLocaleString("en-GB", {
+    style: "currency",
+    currency: "GBP",
+    maximumFractionDigits: 0,
+  });
+}
+
+function fmtPercentFraction(v: any) {
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return String(v);
+  return `${(n * 100).toFixed(1)}%`;
+}
+export default function TimeseriesChart({
+  series,
+  unit = "GBP",
+  title = "Trend",
+}: {
+  series: Series[] | null | undefined;
+  unit?: "GBP" | "PERCENT";
+  title?: string;
+}) {
   if (!series || series.length === 0) return null;
 
   const data = mergeSeries(series);
 
   return (
-    <div className="rounded-2xl border p-4 bg-white shadow-sm">
-      <div className="text-sm font-semibold mb-2">Trend</div>
+    <div className="rounded-2xl border p-4 bg-white shadow-sm min-w-0">
+      <div className="text-sm font-semibold mb-2">{title}</div>
 
-      {/* IMPORTANT: explicit pixel height on the container */}
       <div className="w-full" style={{ height: 320 }}>
         <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data}>
-          <XAxis
-            dataKey="ts"
-            type="number"
-            scale="time"
-            domain={["dataMin", "dataMax"]}
-            tickFormatter={(v) =>
-              new Date(v).toISOString().slice(0, 7) // YYYY-MM
-            }
-          />
-          <YAxis />
-          <Tooltip
-            labelFormatter={(v) =>
-              new Date(Number(v)).toISOString().slice(0, 10)
-            }
-            formatter={(v: number) =>
-              v.toLocaleString("en-GB", {
-                style: "currency",
-                currency: "GBP",
-                maximumFractionDigits: 0,
-              })
-            }
-          />
-          <Legend />
-
-          {series.map((s, i) => (
-            <Line
-              key={s.name}
-              dataKey={s.name}
-              stroke={COLORS[i % COLORS.length]}
-              strokeWidth={3}
-              dot={false}
-              connectNulls
+          <LineChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis
+              dataKey="ts"
+              type="number"
+              scale="time"
+              domain={["dataMin", "dataMax"]}
+              tickFormatter={fmtMonth}
             />
-          ))}
-        </LineChart>
+            <YAxis tickFormatter={(v) => fmtYAxis(v, unit)} />
+
+            <Tooltip
+              labelFormatter={(v) => fmtDay(Number(v))}
+              formatter={(v: any) =>
+                unit === "PERCENT"
+                  ? `${(Number(v) * 100).toFixed(1)}%`
+                  : fmtGBP(v)
+              }
+            />
+
+            <Legend />
+            {series.map((s) => (
+              <Line key={s.name} dataKey={s.name} strokeWidth={3} dot={false} connectNulls />
+            ))}
+          </LineChart>
         </ResponsiveContainer>
       </div>
     </div>
   );
 }
-

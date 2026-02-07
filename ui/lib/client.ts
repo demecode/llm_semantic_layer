@@ -20,8 +20,13 @@ export async function getSemanticModels() {
   return r.json();
 }
 
-export async function runPack(packId: string) {
-  const r = await fetch(`/api/packs/${packId}/run`, { method: "POST" });
+export async function runPack(packId: string, body?: any) {
+  const r = await fetch(`/api/packs/${packId}/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : "{}",
+  });
+
   const text = await r.text();
   if (!r.ok) throw new Error(text);
   return JSON.parse(text);

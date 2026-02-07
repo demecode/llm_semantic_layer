@@ -8,12 +8,11 @@ from eng.semantics.manifest_utils import manifest_hash
 import concurrent.futures
 import time
 
-import logging
+from eng.logger import logger
 import concurrent.futures
 import time
 
-logger = logging.getLogger("copilot")
-logger.setLevel(logging.INFO)
+
 logger.propagate = True
 
 
@@ -181,7 +180,63 @@ def execute_metric(metric_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
     # ------------------------
     # RATIO: (keep your ratio handler from earlier if you added it)
     # ------------------------
-    # ... your ratio block here ...
+    if metric_type == "ratio":
+        tp = metric.get("type_params") or {}
+        numerator = tp.get("numerator")
+        denominator = tp.get("denominator")
+
+        num_name = numerator.get("name") if isinstance(numerator, dict) else numerator
+        den_name = denominator.get("name") if isinstance(denominator, dict) else denominator
+
+        if not num_name or not den_name:
+            return {"error": f"Ratio metric '{metric_name}' missing numerator/denominator"}
+
+        num_res = execute_metric(num_name, params)
+        if "error" in num_res:
+            return {"error": f"Ratio numerator '{num_name}' failed: {num_res['error']}"}
+
+        den_res = execute_metric(den_name, params)
+        if "error" in den_res:
+            return {"error": f"Ratio denominator '{den_name}' failed: {den_res['error']}"}
+
+        num_map = _rows_to_map(num_res.get("rows"))
+        den_map = _rows_to_map(den_res.get("rows"))
+        periods = sorted(set(num_map.keys()) | set(den_map.keys()))
+
+        rows = []
+        for p in periods:
+            n = num_map.get(p, 0.0)
+            d = den_map.get(p, 0.0)
+            rows.append({"period": p, "value": (n / d) if d else None})
+
+        meta0 = num_res.get("meta") or {}
+        meta = {
+        "metric": metric_name,
+        "relation": meta0.get("relation"),
+        "grain": params.get("grain", "month"),
+        "timestamp_column": meta0.get("timestamp_column"),
+        "type": "ratio",
+        "numerator": num_name,
+        "denominator": den_name,
+        "unit": "PERCENT",
+        }
+        meta["unit"] = "GBP"
+
+        contract = {
+            "metric": metric_name,
+            "metric_type": metric_type,
+            "semantic_model": chosen_sm.get("name"),
+            "measure": None,
+            "grain": meta.get("grain"),
+            "timestamp_column": meta.get("timestamp_column"),
+            "relation": meta.get("relation"),
+            "manifest_hash": mh,
+        }
+
+        out = {"meta": meta, "sql": None, "rows": rows, "contract": contract}
+        cache_set(cache_payload, out, ttl_seconds=300)
+        out["cache"] = {"cached": False}
+        return out
 
     # ------------------------
     # SIMPLE (and any others that compile to SQL directly)

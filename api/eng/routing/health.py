@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from pathlib import Path
 import requests
 
-from eng.config import DBT_MANIFEST_PATH, OLLAMA_HOST, MODEL_NAME
+from eng.config import DBT_MANIFEST_PATH, OLLAMA_BASE_URL, MODEL_NAME
 from eng.semantics.dbt_semantics import list_metrics
 
 router = APIRouter()
@@ -27,10 +27,10 @@ def health():
         out["ok"] = False
 
     #  ollama 
-    out["checks"]["ollama_host"] = OLLAMA_HOST
+    out["checks"]["OLLAMA_BASE_URL"] = OLLAMA_BASE_URL
     out["checks"]["ollama_model"] = MODEL_NAME
     try:
-        tags = requests.get(f"{OLLAMA_HOST}/api/tags", timeout=5)
+        tags = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=5)
         tags.raise_for_status()
         payload = tags.json()
 

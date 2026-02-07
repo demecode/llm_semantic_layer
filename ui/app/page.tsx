@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ChatResponse, MetricsResponse, SemanticModelsResponse } from "@/lib/type";
-import { postChat, getMetrics, getSemanticModels } from "@/lib/client";
+import { postChat, getMetrics, getSemanticModels, runPack } from "@/lib/client";
 import KpiCards from "@/components/KpiCards";
 import TimeseriesChart from "@/components/TimeseriesChart";
 import DebugDrawer from "@/components/DebugDrawer";
-
-import { runPack } from "@/lib/client";
-
+import RankingChart from "@/components/RankingChart";
 
 const EXAMPLE_QUESTIONS = [
   "Show total spend by month",
@@ -19,44 +17,75 @@ const EXAMPLE_QUESTIONS = [
   "Show total spend for the last 6 months",
 ];
 
+type LoadingMode = null | "ask" | "pack:top_n" | "pack:department_vs_company";
 
 export default function Page() {
   const [question, setQuestion] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loadingMode, setLoadingMode] = useState<LoadingMode>(null);
+  const loading = loadingMode !== null;
+
   const [resp, setResp] = useState<ChatResponse | null>(null);
   const [metrics, setMetrics] = useState<MetricsResponse | null>(null);
+  const [semanticModels, setSemanticModels] = useState<SemanticModelsResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
+  // Fetch sidebar data once
   useEffect(() => {
-    getMetrics()
-      .then(setMetrics)
+    setErr(null);
+    Promise.all([getMetrics(), getSemanticModels()])
+      .then(([m, sm]) => {
+        setMetrics(m);
+        setSemanticModels(sm);
+      })
       .catch((e) => setErr(String(e)));
   }, []);
 
-  async function onRunPack() {
+  const statusText = useMemo(() => {
+    if (!loadingMode) return null;
+    if (loadingMode === "ask") return "Routing question → governed metrics…";
+    if (loadingMode === "pack:top_n") return "Running Top-N pack…";
+    if (loadingMode === "pack:department_vs_company") return "Running Department vs Company pack…";
+    return "Running…";
+  }, [loadingMode]);
+
+  async function onAsk() {
     setErr(null);
-    setLoading(true);
-    setResp(null);
+    setLoadingMode("ask");
     try {
-      const r = await runPack("department_vs_company");
-      // const r = await postChat(question);
+      const r = await postChat(question);
       setResp(r);
     } catch (e: any) {
       setErr(e?.message || String(e));
     } finally {
-      setLoading(false);
+      setLoadingMode(null);
     }
   }
 
-const [semanticModels, setSemanticModels] = useState<SemanticModelsResponse | null>(null);
+  async function onRunPackDepartmentVsCompany() {
+    setErr(null);
+    setLoadingMode("pack:department_vs_company");
+    try {
+      const r = await runPack("department_vs_company");
+      setResp(r as any);
+    } catch (e: any) {
+      setErr(e?.message || String(e));
+    } finally {
+      setLoadingMode(null);
+    }
+  }
 
-useEffect(() => {
-  getMetrics().then(setMetrics).catch((e) => setErr(String(e)));
-  getSemanticModels().then(setSemanticModels).catch((e) => setErr(String(e)));
-}, [])
-
-
-
+  async function onRunPackTopN() {
+    setErr(null);
+    setLoadingMode("pack:top_n");
+    try {
+      const r = await runPack("top_n");
+      setResp(r as any);
+    } catch (e: any) {
+      setErr(e?.message || String(e));
+    } finally {
+      setLoadingMode(null);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -69,7 +98,7 @@ useEffect(() => {
             </p>
           </div>
 
-          {/* RIGHT SIDEBAR (stack cards vertically) */}
+          {/* RIGHT SIDEBAR */}
           <div className="w-[360px] space-y-4 shrink-0">
             <div className="rounded-2xl border bg-white p-3 shadow-sm">
               <div className="text-sm font-semibold mb-2">Available metrics</div>
@@ -106,18 +135,34 @@ useEffect(() => {
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4 min-w-0">
           <div className="lg:col-span-1 rounded-2xl border bg-white p-4 shadow-sm">
             <div className="text-sm font-semibold mb-2">Ask</div>
-              <button
-                onClick={onRunPack}
-                disabled={loading}
-                className="w-full rounded-xl border py-2 text-sm bg-white hover:bg-gray-50"
-              >
-                {loading ? "Running..." : "Run: Digital Solutions vs Company (Pack)"}
-              </button>
+
+            <button
+              onClick={onRunPackTopN}
+              disabled={loading}
+              className="w-full rounded-xl border py-2 text-sm bg-white hover:bg-gray-50 disabled:opacity-60"
+              type="button"
+            >
+              {loadingMode === "pack:top_n" ? "Running Top-N…" : "Run: Top-N Vendors (Pack)"}
+            </button>
+
+            <div className="h-2" />
+
+            <button
+              onClick={onRunPackDepartmentVsCompany}
+              disabled={loading}
+              className="w-full rounded-xl border py-2 text-sm bg-white hover:bg-gray-50 disabled:opacity-60"
+              type="button"
+            >
+              {loadingMode === "pack:department_vs_company"
+                ? "Running Comparison…"
+                : "Run: Digital Solutions vs Company (Pack)"}
+            </button>
+
             <textarea
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              className="w-full border rounded-xl p-3 text-sm min-h-[120px]"
-              placeholder="e.g. Show Digital Solutions spend vs the rest of the company for the last 2 years"
+              className="mt-3 w-full border rounded-xl p-3 text-sm min-h-[120px]"
+              placeholder="e.g. Show total spend by month"
             />
 
             <div className="mt-3">
@@ -137,12 +182,18 @@ useEffect(() => {
             </div>
 
             <button
-              onClick={onRunPack}
+              onClick={onAsk}
               disabled={loading || !question.trim()}
               className="mt-3 w-full rounded-xl bg-black text-white py-2 text-sm disabled:opacity-50"
+              type="button"
             >
-              {loading ? "Running..." : "Ask"}
+              {loadingMode === "ask" ? "Asking…" : "Ask"}
             </button>
+
+            {/* Loading status (no fading) */}
+            {statusText && (
+              <div className="mt-3 text-xs text-gray-500">{statusText}</div>
+            )}
 
             {err && <div className="mt-3 text-sm text-red-600">{err}</div>}
 
@@ -156,10 +207,15 @@ useEffect(() => {
             <DebugDrawer debug={resp} />
           </div>
 
-          {/* IMPORTANT: min-w-0 so Recharts can measure correctly */}
           <div className="lg:col-span-2 space-y-4 min-w-0">
+            {!resp && (
+              <div className="rounded-2xl border p-6 bg-white shadow-sm text-sm text-gray-600">
+                Run a pack or ask a question to generate governed charts and KPIs.
+              </div>
+            )}
             <KpiCards kpis={resp?.kpis} />
-            <TimeseriesChart series={resp?.series} />
+            <RankingChart ranking={(resp as any)?.ranking} />
+            <TimeseriesChart series={resp?.series} unit={(resp as any)?.chart?.unit || (resp as any)?.unit} />
           </div>
         </div>
       </div>
