@@ -9,30 +9,41 @@ export default function DebugDrawer({ debug }: { debug: any }) {
   return (
     <div className="mt-3">
       <button
-        className="text-sm underline text-gray-600"
+        className="text-sm underline text-gray-600 hover:text-gray-800"
         onClick={() => setOpen((v) => !v)}
+        type="button"
       >
         {open ? "Hide debug" : "Show debug"}
       </button>
 
       {open && (
-        <>
-          <pre className="mt-2 rounded-2xl border p-3 bg-gray-50 text-xs overflow-auto">
+        <div className="mt-2 space-y-3">
+          <pre className="rounded-2xl border p-3 bg-gray-50 text-xs overflow-auto max-h-[320px]">
             {JSON.stringify(debug, null, 2)}
           </pre>
 
           {debug.contract && (
-            <div className="mt-4 text-xs space-y-1 text-gray-700">
-              <div><b>Metric:</b> {debug.contract.metric}</div>
-              <div><b>Semantic model:</b> {debug.contract.semantic_model}</div>
-              <div><b>Relation:</b> {debug.contract.relation}</div>
-              <div><b>Manifest hash:</b> {debug.contract.manifest_hash}</div>
+            <div className="text-xs space-y-1 text-gray-700">
+              <div>
+                <b>Metric:</b> {debug.contract.metric}
+              </div>
+              <div>
+                <b>Semantic model:</b> {debug.contract.semantic_model}
+              </div>
+              <div>
+                <b>Relation:</b> {debug.contract.relation}
+              </div>
+              <div>
+                <b>Manifest hash:</b> {debug.contract.manifest_hash}
+              </div>
               {debug.cache && (
-                <div><b>Cache hit:</b> {String(debug.cache.cached)}</div>
+                <div>
+                  <b>Cache hit:</b> {String(debug.cache.cached)}
+                </div>
               )}
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );

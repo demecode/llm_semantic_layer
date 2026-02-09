@@ -5,6 +5,11 @@ export type ChatResponse = {
   kpis?: Record<string, any> | null;
   series?: { name: string; data: TimeseriesPoint[] }[] | null;
   chart?: { type: string; x: string; y: string; unit?: string } | null;
+    // ranking packs (Top-N)
+  ranking?: {
+    label: string;
+    value: number;
+  }[];
   meta?: any;
   data?: any;
 };

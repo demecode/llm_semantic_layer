@@ -5,27 +5,34 @@ intent: ranking
 
 defaults:
   n: 10
-  grain: year
+  grain: month
+  window:
+    last_n_months: 12
+  anchor_end_date: "2025-10-01"
 
-parameters:
-  metric:
-    type: metric
-    required: true
-  dimension:
-    type: dimension
-    required: true
-  n:
-    type: integer
-    default: 10
-  grain:
-    type: time_grain
-    default: year
-  start_date:
-    type: date
-    required: false
-  end_date:
-    type: date
-    required: false
+ranking:
+  metric: total_spend
+  dimension: vendor_name
 
 output:
   type: ranking
+# parameters:
+#   metric:
+#     type: metric
+#     required: true
+#   dimension:
+#     type: dimension
+#     required: true
+#   n:
+#     type: integer
+#     default: 10
+#   grain:
+#     type: time_grain
+#     default: year
+#   start_date:
+#     type: date
+#     required: false
+#   end_date:
+#     type: date
+#     required: false
+
