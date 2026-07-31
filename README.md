@@ -1,4 +1,4 @@
-# Governed Semantic Analytics Copilot (V1)
+# AXT (V1)
 
 An open-core prototype of a **governed semantic analytics agent**.
 
